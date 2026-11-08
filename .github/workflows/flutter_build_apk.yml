@@ -1,0 +1,52 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: 'Job ID'
+        required: true
+      zip_path:
+        description: 'Path file zip'
+        required: false
+      zip_url:
+        description: 'URL zip'
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+      - name: Prepare
+        run: |
+          mkdir -p build_temp
+          if [ -n "${{ github.event.inputs.zip_path }}" ]; then
+            unzip -q "${{ github.event.inputs.zip_path }}" -d build_temp
+          elif [ -n "${{ github.event.inputs.zip_url }}" ]; then
+            wget -q "${{ github.event.inputs.zip_url }}" -O project.zip
+            unzip -q project.zip -d build_temp
+          fi
+          cd build_temp
+          if [ $(ls -d */ | wc -l) -eq 1 ]; then mv */ ../project; else mv . ../project; fi
+      - name: Deps
+        working-directory: ./project
+        run: flutter pub get
+      - name: Build
+        working-directory: ./project
+        run: flutter build apk --release
+      - name: Rename
+        run: mv project/build/app/outputs/flutter-apk/app-release.apk apk-${{ github.event.inputs.job_id }}.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.event.inputs.job_id }}
+          path: apk-${{ github.event.inputs.job_id }}.apk
